@@ -60,6 +60,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📬 Contact
 
-[Your Name] - [@curiousZeedX](https://x.com/curiousZeedX)
+[@curiousZeedX](https://x.com/curiousZeedX)
 
 Project Link: [https://github.com/AniruddhaChattopadhyay/Tweet-Automation](https://github.com/AniruddhaChattopadhyay/Tweet-Automation)
