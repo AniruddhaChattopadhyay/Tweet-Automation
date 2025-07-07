@@ -1,0 +1,29 @@
+[
+  {
+    "tweet": "Context Engineering is the new Prompt Engineering. Fight me. It\u2019s designing systems that feed LLMs the right info/tools. As @_philschmid says, it\u2019s about giving the model 'everything it needs to accomplish a task.' We've moved from whispering secrets to building the whole library. https://twitter.com/_philschmid/status/1940692654284505391"
+  },
+  {
+    "tweet": "The entire AI startup scene just got stress-tested by one guy named Soham. The resume was wild: GitHub handle 'satya-nutella' and claims of working at 4 AI startups as an MBA student. The new litmus test for a 'serious startup' is whether Soham applied. \ud83d\ude02 https://twitter.com/Yuchenj_UW/status/1940602883319517646"
+  },
+  {
+    "tweet": "Google's Veo 3 video model is now global for Gemini Pro users. The Liquid Death commercial made with it is S-tier. But here's the catch: it's 'Veo 3 Fast' and you only get 3 prompts per day. Google, please, we're trying to make art here. https://9to5google.com/2025/07/02/gemini-veo-3-world/"
+  },
+  {
+    "tweet": "DeepSeek just dropped a new model that's reportedly 200% faster. R1T2 was built with an 'Assembly of Experts' approach and is open source under MIT. Another high-quality open release putting pressure on the big labs. Go build something. https://twitter.com/reach_vb/status/1940536684061643239"
+  },
+  {
+    "tweet": "Another day, another state-of-the-art open-source coding agent. Together AI released DeepSWE, trained with RL on top of Qwen3-32B. They open-sourced the full training toolkit and methodology. The pace of open source is relentless. https://twitter.com/tri_dao/status/1940765882227347585"
+  },
+  {
+    "tweet": "Finally, a good open-source TTS that isn't vaporware. Kyutai just released a real-time, low-latency text-to-speech model. It can even clone voices from 10s of audio (with consent guardrails, of course). Serves 32 users on one GPU. Impressive. https://twitter.com/ClementDelangue/status/1940784886509682935"
+  },
+  {
+    "tweet": "OpenAI's Stargate datacenter is projected to need 5 GIGAWATTS of power. That's enough to power ~4.3 million US homes. We're gonna need a bigger grid. Or maybe just a Dyson sphere. \ud83d\ude80 https://twitter.com/scaling01/status/1940536579183067540"
+  },
+  {
+    "tweet": "The rebellion against CUDA's walled garden has... two full-time developers. The ZLUDA project aims to run CUDA binaries on non-Nvidia GPUs. Godspeed to them. Given the legal risks (see: Oracle v. Google), this is a brave but necessary fight for the ecosystem. https://www.tomshardware.com/software/a-project-to-bring-cuda-to-non-nvidia-gpus-is-making-major-progress-zluda-update-now-has-two-full-time-developers-working-on-32-bit-physx-support-and-llms-amongst-other-things"
+  },
+  {
+    "tweet": "Meta's AI division is not a monolith. FAIR is the 'small, prestigious lab' with limited GPUs, while GenAI and MSL are the big training groups. Good context as they bring on heavy hitters like Nat Friedman to 'make amazing AI products.' https://twitter.com/ZeyuanAllenZhu/status/1940659709478162555"
+  }
+]

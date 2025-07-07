@@ -1,20 +1,19 @@
 import tweepy
 import json
-import random
-import schedule
-import time
 import os
 from dotenv import load_dotenv
-import requests
 import pytz
-from llm import get_quote_response, get_cultural_insight, get_psychology_fact
-
-
+from llm import generate_tweets_from_email
+from slack_bot import SlackTweetBot
+from slack_webhook import set_slack_bot
+from logger_config import get_logger, log_performance
 
 # Load environment variables
 load_dotenv()
-os.environ['GEMINI_API_KEY'] = os.getenv("GEMINI_API_KEY")
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
+# Get logger for this module
+logger = get_logger("twitter")
 
 # X API credentials
 API_KEY = os.getenv("API_KEY")
@@ -22,81 +21,75 @@ API_SECRET = os.getenv("API_SECRET")
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET")
 
-
 client = tweepy.Client(
     consumer_key=os.getenv("API_KEY"),
     consumer_secret=os.getenv("API_SECRET"),
     access_token=os.getenv("ACCESS_TOKEN"),
-    access_token_secret=os.getenv("ACCESS_TOKEN_SECRET")
+    access_token_secret=os.getenv("ACCESS_TOKEN_SECRET"),
 )
 
-# Option 1: Load quotes from a local file
-def load_local_quotes():
-    with open("quotes.json", "r") as file:
-        return json.load(file)
+# Initialize Slack bot
+slack_bot = SlackTweetBot()
+set_slack_bot(slack_bot)  # Set global reference for webhook handler
 
-# Option 2: Fetch a random quote from an API
-timezone = pytz.timezone('Asia/Kolkata')
+timezone = pytz.timezone("Asia/Kolkata")
 
-def fetch_quote_from_api():
-    url = "https://api.quotable.io/random"
 
-    payload = {}
-    headers = {}
-
-    response = requests.request("GET", url, headers=headers, data=payload,verify=False)
-    data = response.json()
-    return f"{data['content']} - {data['author']}"
-# Post a random quote
-def post_quote():
+@log_performance
+def send_tweet_for_approval():
+    """Send the next tweet to Slack for approval instead of posting directly"""
     try:
-        quote = get_quote_response()
-        client.create_tweet(text=quote)
-        print(f"Posted: {quote}")
+        with open("generated_tweets.json", "r") as f:
+            tweets = json.load(f)
+
+        if tweets:
+            # Get the next tweet in queue
+            tweet_data = tweets[0]
+            tweet_text = (
+                tweet_data.get("tweet", "")
+                if isinstance(tweet_data, dict)
+                else tweet_data
+            )
+
+            # Send to Slack for approval
+            message_ts = slack_bot.send_tweet_for_approval(tweet_text, 0)
+
+            if message_ts:
+                logger.info(
+                    f"✅ Tweet sent to Slack for approval: {tweet_text[:50]}..."
+                )
+            else:
+                logger.error("❌ Failed to send tweet to Slack")
+
+        else:
+            logger.warning("📭 No tweets in queue. Generating new tweets...")
+            # generate_tweets_from_email()
+            # # Try again after generating
+            # send_tweet_for_approval()
+
+    except FileNotFoundError:
+        logger.warning("📄 generated_tweets.json not found. Generating new tweets...")
+        generate_tweets_from_email()
+        send_tweet_for_approval()
     except Exception as e:
-        print(f"Error: {e}")
-
-def post_cultural_insight():
-    try:
-        insight = get_cultural_insight()
-        client.create_tweet(text=insight)
-        print(f"Posted: {insight}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-def post_psychology_fact():
-    try:
-        fact = get_psychology_fact()
-        client.create_tweet(text=fact)
-        print(f"Posted: {fact}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-def choose_random_post():
-    # Dictionary mapping of functions
-    post_functions = {
-        'quote': post_quote,
-        'cultural': post_cultural_insight,
-        'psychology': post_psychology_fact
-    }
-    
-    # Randomly choose a function
-    chosen_type = random.choice(list(post_functions.keys()))
-    chosen_function = post_functions[chosen_type]
-    
-    try:
-        print(f"Posting {chosen_type}...")
-        chosen_function()
-    except Exception as e:
-        print(f"Error in {chosen_type}: {e}")
-
-# Schedule posts for IST timezone
-schedule.every().day.at("11:00",timezone).do(choose_random_post)  # 9:30 AM IST
-schedule.every().day.at("16:00",timezone).do(choose_random_post)  # 2:00 PM IST 
-schedule.every().day.at("21:00",timezone).do(choose_random_post)  # 7:30 PM IST
-
-while True:
-    schedule.run_pending()
-    time.sleep(900)  # Sleep for 15 minutes
+        logger.error(f"❌ An error occurred: {e}")
 
 
+def post_generated_tweet():
+    """Legacy function - now redirects to Slack approval workflow"""
+    logger.info("📨 Checking for tweets to send for approval...")
+    send_tweet_for_approval()
+
+
+# Generate tweets from email at the start
+logger.info("🚀 Starting tweet automation with Slack approval workflow...")
+logger.info("📧 Generating tweets from latest email...")
+# generate_tweets_from_email()
+
+# Send first tweet for approval
+logger.info("📨 Sending first tweet to Slack for approval...")
+send_tweet_for_approval()
+
+logger.info("✅ Tweet automation ready!")
+logger.info("📱 Make sure to run the Slack webhook server: python slack_webhook.py")
+logger.info("🔄 Bot will send tweets to Slack for approval at scheduled times")

@@ -1,189 +1,192 @@
-from litellm import completion
 import json
-def get_quote_response():
+import imaplib
+import email
+import os
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+from google import genai
+from logger_config import get_logger, log_performance
+
+# Load environment variables
+load_dotenv()
+
+# Get logger for this module
+logger = get_logger("llm")
+
+
+class Tweet(BaseModel):
+    tweet: str = Field(description="The tweet to be posted")
+
+
+@log_performance
+def fetch_latest_email_from_gmail():
+    """Fetch the latest email from Gmail using IMAP"""
     try:
-        with open('quotes.json', 'r') as f:
-            quotes_list = json.load(f)
-    except FileNotFoundError:
-        quotes_list = []
+        # Gmail IMAP settings
+        gmail_user = os.getenv("GMAIL_USER")
+        gmail_password = os.getenv("GMAIL_APP_PASSWORD")
 
-    system_message = '''You are a helpful assistant that can generate a quote it's author and its explanation.
-        Write in first person as if you are the me, a 26year old story teller from India. I intent to tweet this quote.
-        Please don't make it sound like a quote, but a story. Make it engaging and interesting. Don't make it sound AI, make it sound natural.
-        THE INTENTION IS TO MAKE THE TWEET VIRAL'''
-        
-    user_message = f'''Generate a quote for me to tweet. Make it short and engaging. Don't make it sound like a quote, but a story. Make it engaging and interesting. Don't make it sound AI, make it sound natural. Don't include the following quotes :
-{quotes_list}'''
-    messages = [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": user_message
-        }
-    ]
+        if not gmail_user or not gmail_password:
+            logger.error("Gmail credentials not found in environment variables")
+            return None
 
-    response_schema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "quote": {
-                        "type": "string",
-                    },
-                    "author": {
-                        "type": "string",
-                    },
-                    "explanation": {
-                        "type": "string",
-                    }
-                },
-                "required": ["quote","author","explanation"],
-            },
-        }
+        # Connect to Gmail
+        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail.login(gmail_user, gmail_password)
 
+        # Select inbox
+        mail.select("inbox")
 
-    response = completion(
-        model="gemini/gemini-2.0-flash", 
-        messages=messages, 
-        response_format={"type": "json_object", "response_schema": response_schema} # 👈 KEY CHANGE
+        # Search for emails from news@smol.ai and get the latest one
+        status, messages = mail.search(None, 'FROM "news@smol.ai"')
+        email_ids = messages[0].split()
+
+        if not email_ids:
+            logger.warning("No emails found from news@smol.ai")
+            return None
+
+        # Get the latest email (last ID in the list)
+        latest_email_id = email_ids[-1]
+
+        # Fetch the email
+        status, msg_data = mail.fetch(latest_email_id, "(RFC822)")
+        email_body = msg_data[0][1]
+        email_message = email.message_from_bytes(email_body)
+
+        # Extract email content
+        email_content = ""
+        subject = email_message["subject"]
+        from_email = email_message["from"]
+
+        # Get email body
+        if email_message.is_multipart():
+            for part in email_message.walk():
+                if part.get_content_type() == "text/plain":
+                    email_content = part.get_payload(decode=True).decode()
+                    break
+        else:
+            email_content = email_message.get_payload(decode=True).decode()
+
+        # Close connection
+        mail.logout()
+
+        # Combine subject and content
+        full_email_content = (
+            f"Subject: {subject}\nFrom: {from_email}\n\n{email_content}"
         )
-    response = json.loads(response.choices[0].message.content)
-    response = response[0]
-    print(response)
-    tweet_str = f"{response['quote']}"# - {response['author']} \n\n {response['explanation']}"
-    quotes_list.append(tweet_str)
-    with open('quotes.json', 'w') as f:
-        json.dump(quotes_list, f)
-    return tweet_str
+
+        logger.info(f"✅ Successfully fetched email: {subject[:50]}...")
+        return full_email_content
+
+    except Exception as e:
+        logger.error(f"💥 Error fetching email: {e}")
+        return None
 
 
-def get_psychology_fact():
+@log_performance
+def generate_tweets_from_email():
+    # Try to fetch from Gmail first, fallback to text file
     try:
-        with open('psychology_facts.json', 'r') as f:
-            facts_list = json.load(f)
+        with open("email.txt", "r") as f:
+            email_content = f.read()
+        logger.info("📄 Using email content from email.txt file")
     except FileNotFoundError:
-        facts_list = []
-        
-    system_message = '''You are a helpful assistant that generates interesting psychological facts and their explanations.
-        Write in first person as if you are me, a 26-year-old psychology enthusiast from India. I intend to tweet this fact.
-        Make it engaging and relatable to everyday life. Focus on interesting psychological phenomena, cognitive biases, 
-        or behavioral patterns. Don't make it sound academic - explain it like you're telling a friend.
-        THE INTENTION IS TO MAKE THE TWEET VIRAL'''
-        
-    user_message = f'''Share an interesting psychological fact or phenomenon that people might not know about. 
-    Make it engaging and easy to understand. Include a brief real-life example or application.
-    Don't include any of these previously shared facts: {facts_list}'''
+        logger.info("📧 email.txt not found, fetching from Gmail...")
+        email_content = fetch_latest_email_from_gmail()
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": user_message
-        }
-    ]
+        if email_content:
+            # save email to file
+            with open("email.txt", "w") as f:
+                f.write(email_content)
+            logger.info("💾 Email content saved to email.txt")
+        else:
+            logger.error("❌ Failed to fetch email from Gmail")
+            return None
 
-    response_schema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "fact": {
-                        "type": "string",
-                    },
-                    "phenomenon": {
-                        "type": "string",
-                    },
-                    "explanation": {
-                        "type": "string",
-                    }
-                },
-                "required": ["fact", "phenomenon", "explanation"],
-            },
-        }
+    user_message = f"""### SYSTEM
+You are "Ani on X” — an irreverent but insightful AI engineer who writes tweets that mix sharp analysis with light shit-posting.  
+Assume the audience is technically literate (builders, PMs, VCs) and lives on tech Twitter.
 
-    response = completion(
-        model="gemini/gemini-2.0-flash", 
-        messages=messages, 
-        response_format={"type": "json_object", "response_schema": response_schema}
-        )
-    
-    response = json.loads(response.choices[0].message.content)
-    response = response[0]
-    tweet_str = f"🧠 {response['fact']}\n\n💡 {response['phenomenon']}\n\n📝 {response['explanation']}"
-    
-    facts_list.append(tweet_str)
-    with open('psychology_facts.json', 'w') as f:
-        json.dump(facts_list, f)
-    
-    return tweet_str
+### TASK
+Turn the newsletter text I supply (inside the <NEWSLETTER> … </NEWSLETTER> tag) into fresh tweets.
 
-
-
-def get_cultural_insight():
-    try:
-        with open('cultural_insights.json', 'r') as f:
-            insights_list = json.load(f)
-    except FileNotFoundError:
-        insights_list = []
-        
-    system_message = '''You are a cultural storyteller sharing fascinating insights about Indian culture, traditions,
-    festivals, and customs. Write in first person as if you are a 26-year-old Indian sharing cultural knowledge.
-    Focus on lesser-known aspects, interesting origins, and meaningful connections to modern life.
-    Make it engaging and relatable while maintaining authenticity and respect for the traditions.
-    THE INTENTION IS TO MAKE THE TWEET VIRAL'''
-        
-    user_message = f'''Share an interesting insight about Indian culture, tradition, or festival.
-    It could be about food, customs, celebrations, art forms, or traditional practices.
-    Make it engaging and informative. Explain its significance and how it relates to modern life.
-    Don't include any of these previously shared insights: {insights_list}'''
-
-    messages = [
-        {
-            "role": "system",
-            "content": system_message
-        },
-        {
-            "role": "user",
-            "content": user_message
-        }
-    ]
-
-    response_schema = {
-            "type": "object",
-            "properties": {
-                "topic": {
-                    "type": "string",
-                    "description": "The cultural topic or tradition being discussed"
-                },
-                "significance": {
-                    "type": "string",
-                    "description": "Historical and cultural significance of the topic"
-                },
-                "modern_relevance": {
-                    "type": "string",
-                    "description": "How this tradition or custom relates to modern life"
-                }
-            },
-            "required": ["topic", "significance", "modern_relevance"]
+### DELIVERABLE
+Return valid JSON shaped like:
+{
+        [
+            {"tweet": "tweet 1"},
+            {"tweet": "tweet 2"},
+        ]
     }
 
-    response = completion(
-        model="gemini/gemini-2.0-flash", 
-        messages=messages, 
-        response_format={"type": "json_object", "response_schema": response_schema}
-    )
-    
-    response = json.loads(response.choices[0].message.content)
-    tweet_str = f"{response['topic']}\n\n📜 {response['significance']}\n\n🔄 {response['modern_relevance']}"
-    
-    insights_list.append(tweet_str)
-    with open('cultural_insights.json', 'w') as f:
-        json.dump(insights_list, f)
-    
-    return tweet_str
+### HOW MANY
+* Aim for 8–12 tweets per newsletter.
+* Each tweet must be self-contained (no “1/🧵” unless explicitly asked).
+* If the newsletter has a blockbuster story (e.g., paradigm-shifting model release) add **one** bonus “mini-thread”: 1 headline tweet + up to 3 follow-ups. Use the same JSON schema but wrap that thread inside a `"thread"` key.
+* The tweets can be longer than 280 characters if needed.
+### STYLE GUIDE
+1. **Hook first**: open strong or weird. Examples:  
+   * “Ilya just rage-quit the stealth mode.”  
+   * “Context engineering is the new prompt engineering—fight me.”
+2. **Voice**: plain English, short sentences, meme-ready. A sprinkle of 🚀, 💀 or 😂 is fine, but keep emoji below 2 per tweet.
+3. **Substance**: always include at least one concrete detail (metric, quote, link) from the source.  
+   * Good: “Perplexity just dropped Morningstar reports for free. Bloomberg terminal speed-run? 🤔”  
+   * Bad: “Big news in AI today!”
+4. **Take**: add a quick opinion, question, or joke so the tweet isn’t just a headline.
+5. **Avoid**: LinkedIn­-style hype, “As an AI model…”, generic praise, over-formal syntax.
+6. **Length**: The tweets can be longer than 280 characters if needed.
+
+### CONTENT SELECTION RULES
+* Prioritise stories with at least one of:
+  * Major leadership change or new product launch.
+  * Open-source model/tool release engineers can try today.
+  * Data points that spark debate (benchmarks, power usage 📈).
+* Skip duplicate coverage unless you can add a spicy angle.
+
+
+### PROCESS (think step-by-step but don’t show steps)
+1. Parse the newsletter into bullet-point facts.  
+2. Score each fact on **tweet-worthiness** (novelty, impact, fun).  
+3. Draft tweets following the style guide.  
+4. Self-check against the Quality Checklist below.  
+5. Output JSON.
+
+### QUALITY CHECKLIST
+- [ ] Hook in first 7 words.  
+- [ ] Concrete fact or stat from source.  
+- [ ] Opinion / quip adds human flavor.  
+- [ ] Spelling / grammar clean.  
+
+### INPUT
+<NEWSLETTER>
+{email_content}
+</NEWSLETTER>
+"""
+
+    logger.info("🤖 Generating tweets using Gemini API...")
+    client = genai.Client()
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=user_message,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": list[Tweet],
+            },
+        )
+        response_json = json.loads(response.text)
+
+        # Log the number of tweets generated
+        tweet_count = len(response_json)
+        logger.info(f"✅ Generated {tweet_count} tweets successfully")
+
+        with open("generated_tweets.json", "w") as f:
+            json.dump(response_json, f, indent=2)
+
+        logger.info("💾 Tweets saved to generated_tweets.json")
+        return response
+
+    except Exception as e:
+        logger.error(f"💥 Error generating tweets with Gemini: {e}")
+        return None
